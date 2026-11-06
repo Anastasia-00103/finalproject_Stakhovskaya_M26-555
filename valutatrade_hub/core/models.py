@@ -158,3 +158,82 @@ class User:
             salt=data["salt"],
             registration_date=datetime.fromisoformat(data["registration_date"]),
         )
+
+class Wallet:
+    """Кошелёк пользователя для одной конкретной валюты.
+
+    Приватный атрибут: _balance.
+    Публичное свойство: balance (геттер + сеттер с валидацией).
+    """
+
+    def __init__(self, currency_code: str, balance: float = 0.0) -> None:
+        if not isinstance(currency_code, str) or not currency_code.strip():
+            raise ValueError("Код валюты не может быть пустым")
+        # Код валюты храним в верхнем регистре: usd -> USD
+        self.currency_code = currency_code.strip().upper()
+        # Присваиваем через сеттер, чтобы валидация отработала и в конструкторе
+        self.balance = balance
+
+    # ------------------------------------------------------------------ #
+    # Свойство balance (геттер + сеттер)
+    # ------------------------------------------------------------------ #
+
+    @property
+    def balance(self) -> float:
+        return self._balance
+
+    @balance.setter
+    def balance(self, value: float) -> None:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise TypeError("Баланс должен быть числом")
+        if value < 0:
+            raise ValueError("Баланс не может быть отрицательным")
+        self._balance = float(value)
+
+    # ------------------------------------------------------------------ #
+    # Публичные методы
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _validate_amount(amount: float) -> float:
+        """Проверяет, что сумма — положительное число, возвращает float."""
+        if not isinstance(amount, (int, float)) or isinstance(amount, bool):
+            raise TypeError("Сумма должна быть числом")
+        if amount <= 0:
+            raise ValueError("Сумма должна быть положительным числом")
+        return float(amount)
+
+    def deposit(self, amount: float) -> None:
+        """Пополнение баланса."""
+        amount = self._validate_amount(amount)
+        self.balance += amount
+
+    def withdraw(self, amount: float) -> None:
+        """Снятие средств. Проверяет, что сумма не превышает баланс."""
+        amount = self._validate_amount(amount)
+        if amount > self._balance:
+            raise ValueError(
+                f"Недостаточно средств: баланс {self._balance} {self.currency_code}"
+            )
+        self.balance -= amount
+
+    def get_balance_info(self) -> str:
+        """Возвращает строку с текущим балансом."""
+        return f"{self._balance:.8f} {self.currency_code}"
+
+    # ------------------------------------------------------------------ #
+    # Сериализация (формат совпадает с portfolios.json из задания)
+    # ------------------------------------------------------------------ #
+
+    def to_dict(self) -> dict:
+        return {
+            "currency_code": self.currency_code,
+            "balance": self._balance,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Wallet":
+        return cls(
+            currency_code=data["currency_code"],
+            balance=float(data["balance"]),
+        )
