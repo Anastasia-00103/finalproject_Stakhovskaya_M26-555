@@ -1,4 +1,6 @@
 import argparse
+import json
+from pathlib import Path
 
 from valutatrade_hub.core import usecases
 from valutatrade_hub.core.exceptions import (
@@ -6,6 +8,7 @@ from valutatrade_hub.core.exceptions import (
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
+from valutatrade_hub.parser_service.updater import RatesUpdater
 
 
 def parse_args(args: list[str]):
@@ -19,9 +22,10 @@ def parse_args(args: list[str]):
     parser.add_argument("--amount", type=float)
     parser.add_argument("--from", dest="from_curr", type=str)
     parser.add_argument("--to", dest="to_curr", type=str)
+    parser.add_argument("--source", type=str)
+    parser.add_argument("--top", type=int)
 
     try:
-        # parse_known_args позволяет игнорировать лишние флаги
         parsed, _ = parser.parse_known_args(args)
         return parsed
     except argparse.ArgumentError as e:
@@ -32,7 +36,8 @@ def run_cli():
     """Главный цикл командной строки."""
     print("Добро пожаловать в ValutaTrade Hub!")
     print("Доступные команды:")
-    print("  register, login, show-portfolio, buy, sell, get-rate, exit.")
+    print("  register, login, show-portfolio, buy, sell, get-rate,")
+    print("  update-rates, show-rates, exit.")
     print("Введите 'help' для подсказки по аргументам.")
 
     while True:
@@ -56,10 +61,13 @@ def run_cli():
                 print("  buy --currency BTC --amount 0.05")
                 print("  sell --currency BTC --amount 0.01")
                 print("  get-rate --from USD --to BTC")
+                print("  update-rates [--source coingecko]")
+                print("  show-rates [--currency BTC] [--top 2]")
                 continue
 
             parsed_args = parse_args(args)
 
+            # --- Команды пользователя ---
             if command == "register":
                 if not parsed_args.username or not parsed_args.password:
                     raise ValueError("Необходимы флаги --username и --password")
@@ -88,6 +96,52 @@ def run_cli():
                     raise ValueError("Необходимы флаги --currency и --amount")
                 print(usecases.sell(parsed_args.currency, parsed_args.amount))
 
+            # --- Команды парсера ---
+            elif command == "update-rates":
+                updater = RatesUpdater()
+                print(updater.run_update(target_source=parsed_args.source))
+
+            elif command == "show-rates":
+                rates_file = Path("data/rates.json")
+                if not rates_file.exists():
+                    print(
+                        "Локальный кеш курсов пуст. "
+                        "Выполните 'update-rates', чтобы загрузить данные."
+                    )
+                    continue
+
+                with open(rates_file, "r", encoding="utf-8") as f:
+                    try:
+                        data = json.load(f)
+                    except json.JSONDecodeError:
+                        print("Ошибка чтения кеша курсов.")
+                        continue
+
+                pairs = data.get("pairs", {})
+                if not pairs:
+                    print("Локальный кеш курсов пуст. Выполните 'update-rates'.")
+                    continue
+
+                # Фильтр по валюте
+                if parsed_args.currency:
+                    target = parsed_args.currency.upper()
+                    pairs = {k: v for k, v in pairs.items() if k.startswith(target)}
+                    if not pairs:
+                        print(f"Курс для '{target}' не найден в кеше.")
+                        continue
+
+                # Фильтр по топу
+                if parsed_args.top:
+                    sorted_pairs = sorted(
+                        pairs.items(), key=lambda x: x[1]["rate"], reverse=True
+                    )
+                    pairs = dict(sorted_pairs[: parsed_args.top])
+
+                updated = data.get("last_refresh", "unknown")
+                print(f"Rates from cache (updated at {updated}):")
+                for pair, info in pairs.items():
+                    print(f"- {pair}: {info['rate']}")
+
             else:
                 print(f"Неизвестная команда: {command}")
 
@@ -101,7 +155,7 @@ def run_cli():
             )
         except ApiRequestError as e:
             print(f"Ошибка: {e}. Повторите попытку позже.")
-            
+
         # Перехват стандартных исключений и ошибок валидации
         except ValueError as e:
             print(f"Ошибка: {e}")
