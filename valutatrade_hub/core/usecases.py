@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..decorators import log_action
 from ..infra.database import DatabaseManager
+from ..infra.settings import SettingsLoader
 from ..logging_config import logger
 from .currencies import get_currency
 from .exceptions import InsufficientFundsError
@@ -9,10 +10,54 @@ from .models import Portfolio, User
 
 CURRENT_USER: User | None = None
 db = DatabaseManager()
+settings = SettingsLoader()
 
 
 def get_current_user() -> User | None:
     return CURRENT_USER
+
+
+def _get_rates_from_cache() -> dict[str, float]:
+    """
+    Получает курсы из rates.json и проверяет их свежесть (TTL).
+    Возвращает словарь вида {'BTC': 75000.0, 'USD': 1.0}.
+    """
+    rates_data = db.load("rates.json")
+    pairs = rates_data.get("pairs", {})
+
+    if not pairs:
+        raise ValueError(
+            "Курсы недоступны. Выполните 'update-rates', чтобы загрузить данные."
+        )
+
+    last_refresh_str = rates_data.get("last_refresh")
+    if not last_refresh_str:
+        raise ValueError("В кэше нет метки времени обновления.")
+
+    try:
+        # Формат Z нужно заменить на +00:00 для fromisoformat
+        last_refresh = datetime.fromisoformat(
+            last_refresh_str.replace("Z", "+00:00")
+        )
+    except ValueError:
+        raise ValueError("Некорректный формат времени в кэше.")
+
+    ttl = settings.get("rates_ttl_seconds", 300)
+    now = datetime.now(timezone.utc)
+
+    if (now - last_refresh).total_seconds() > ttl:
+        raise ValueError(
+            "Кэш курсов устарел (старше TTL). "
+            "Выполните 'update-rates', чтобы обновить данные."
+        )
+
+    result = {"USD": 1.0}
+    for pair, info in pairs.items():
+        if pair.endswith("_USD"):
+            code = pair.split("_")[0]
+            result[code] = info["rate"]
+
+    return result
 
 
 def register(username: str, password: str) -> str:
@@ -77,7 +122,8 @@ def show_portfolio(base: str = "USD") -> str:
     if not portfolio.wallets:
         return "Портфель пуст."
 
-    rates = {"USD": 1.0, "EUR": 1.08, "RUB": 0.011, "BTC": 60000.0, "ETH": 3000.0}
+    # Получаем актуальные курсы с проверкой TTL
+    rates = _get_rates_from_cache()
 
     lines = [f"Портфель пользователя '{CURRENT_USER.username}' (база: {base}):"]
     total_value = 0.0
@@ -106,10 +152,11 @@ def get_rate(from_curr: str, to_curr: str) -> str:
     from_curr = get_currency(from_curr).code
     to_curr = get_currency(to_curr).code
 
-    rates = {"USD": 1.0, "EUR": 1.08, "RUB": 0.011, "BTC": 60000.0, "ETH": 3000.0}
+    # Получаем актуальные курсы с проверкой TTL
+    rates = _get_rates_from_cache()
 
     if from_curr not in rates or to_curr not in rates:
-        raise ValueError("Курс недоступен.")
+        raise ValueError(f"Курс {from_curr}→{to_curr} недоступен в кэше.")
 
     rate = rates[from_curr] / rates[to_curr]
     reverse_rate = rates[to_curr] / rates[from_curr]
@@ -130,6 +177,11 @@ def buy(currency: str, amount: float) -> str:
         raise ValueError("'amount' должен быть положительным числом")
 
     currency = get_currency(currency).code
+
+    # Получаем курс с проверкой TTL
+    rates = _get_rates_from_cache()
+    if currency not in rates:
+        raise ValueError(f"Курс для {currency} недоступен.")
 
     portfolios_data = db.load("portfolios.json")
     p_idx = next(
@@ -155,8 +207,7 @@ def buy(currency: str, amount: float) -> str:
     portfolios_data[p_idx] = portfolio.to_dict()
     db.save("portfolios.json", portfolios_data)
 
-    rates = {"USD": 1.0, "EUR": 1.08, "RUB": 0.011, "BTC": 60000.0, "ETH": 3000.0}
-    rate = rates.get(currency, 1.0)
+    rate = rates[currency]
     cost_usd = amount * rate
 
     return (
@@ -176,6 +227,11 @@ def sell(currency: str, amount: float) -> str:
         raise ValueError("'amount' должен быть положительным числом")
 
     currency = get_currency(currency).code
+
+    # Получаем курс с проверкой TTL
+    rates = _get_rates_from_cache()
+    if currency not in rates:
+        raise ValueError(f"Курс для {currency} недоступен.")
 
     portfolios_data = db.load("portfolios.json")
     p_idx = next(
@@ -206,8 +262,7 @@ def sell(currency: str, amount: float) -> str:
     portfolios_data[p_idx] = portfolio.to_dict()
     db.save("portfolios.json", portfolios_data)
 
-    rates = {"USD": 1.0, "EUR": 1.08, "RUB": 0.011, "BTC": 60000.0, "ETH": 3000.0}
-    rate = rates.get(currency, 1.0)
+    rate = rates[currency]
     revenue_usd = amount * rate
 
     return (

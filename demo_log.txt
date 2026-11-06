@@ -1,0 +1,105 @@
+﻿**********************
+Начало записи сценария Windows PowerShell
+Время начала: 20261106163430
+Имя пользователя: LAPTOP-HV75G38B\Asus
+Запуск от имени пользователя: LAPTOP-HV75G38B\Asus
+Имя конфигурации: 
+Компьютер: LAPTOP-HV75G38B (Microsoft Windows NT 10.0.19045.0)
+Ведущее приложение: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+ИД процесса: 9064
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Транскрибирование запущено, выходной файл .\demo_log.txt
+PS C:\Users\Asus\finalproject_Stakhovskaya_M26-555> uv run valutatrade
+Добро пожаловать в ValutaTrade Hub!
+Доступные команды:
+  register, login, show-portfolio, buy, sell, get-rate,
+  update-rates, show-rates, exit.
+Введите 'help' для подсказки по аргументам.
+
+> register --username demo --password 1234
+2026-11-06T16:35:05 INFO REGISTER user='demo' result=OK
+Пользователь 'demo' зарегистрирован (id=4). Войдите: login --username demo --password ****
+
+> login --username demo --password 1234
+2026-11-06T16:35:13 INFO LOGIN user='demo' result=OK
+Вы вошли как 'demo'
+
+> show-portfolio
+Портфель пуст.
+
+> buy --currency BTC --amount 0.01
+2026-11-06T16:35:35 INFO BUY currency='BTC' amount=0.01 result=OK
+Покупка выполнена: 0.0100 BTC по курсу 60000.00 USD/BTC
+Изменения в портфеле:
+- BTC: было 0.0000 → стало 0.0100
+Оценочная стоимость покупки: 600.00 USD
+
+> show-portfolio
+Портфель пользователя 'demo' (база: USD):
+- BTC: 0.0100  → 600.00 USD
+---------------------------------
+ИТОГО: 600.00 USD
+
+> sell --currency BTC --amount 0.005
+2026-11-06T16:35:51 INFO SELL currency='BTC' amount=0.005 result=OK
+Продажа выполнена: 0.0050 BTC по курсу 60000.00 USD/BTC
+Изменения в портфеле:
+- BTC: было 0.0100 → стало 0.0050
+Оценочная выручка: 300.00 USD
+
+> show-portfolio
+Портфель пользователя 'demo' (база: USD):
+- BTC: 0.0050  → 300.00 USD
+---------------------------------
+ИТОГО: 300.00 USD
+
+> get-rate --from USD --to BTC
+Курс USD→BTC: 0.00001667 (обновлено: 2026-11-06 16:36:07)
+Обратный курс BTC→USD: 60000.00000000
+
+> buy --currency ABC --amount 5
+2026-11-06T16:36:16 ERROR BUY currency='ABC' amount=5.0 result=ERROR error_type='CurrencyNotFoundError' msg='Неизвест
+ная валюта 'ABC''
+Ошибка: Неизвестная валюта 'ABC'. Воспользуйтесь 'help', чтобы увидеть поддерживаемые коды.
+
+> sell --currency BTC --amount 1000
+2026-11-06T16:36:23 ERROR SELL currency='BTC' amount=1000.0 result=ERROR error_type='InsufficientFundsError' msg='Нед
+остаточно средств: доступно 0.0050 BTC, требуется 1000.0000 BTC'
+Ошибка: Недостаточно средств: доступно 0.0050 BTC, требуется 1000.0000 BTC
+
+> update-rates --source coingecko
+2026-11-06T16:36:32 INFO Starting rates update...
+2026-11-06T16:36:32 INFO Fetching from CoinGecko...
+2026-11-06T16:36:34 INFO Fetching from CoinGecko... OK (3 rates)
+Update successful. Total rates updated: 3.
+
+> show-rates
+Rates from cache (updated at 2026-11-06T13:36:34Z):
+- BTC_USD: 75869.0
+- ETH_USD: 2237.55
+- SOL_USD: 90.36
+
+> show-rates --top 2
+Rates from cache (updated at 2026-11-06T13:36:34Z):
+- BTC_USD: 75869.0
+- ETH_USD: 2237.55
+
+> show-rates --currency BTC
+Rates from cache (updated at 2026-11-06T13:36:34Z):
+- BTC_USD: 75869.0
+
+> exit
+Выход...
+PS C:\Users\Asus\finalproject_Stakhovskaya_M26-555> Stop-Transcript
+**********************
+Конец записи протокола Windows PowerShell
+Время окончания: 20261106163711
+**********************
