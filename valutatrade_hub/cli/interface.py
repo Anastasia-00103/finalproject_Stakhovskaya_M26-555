@@ -1,7 +1,11 @@
 import argparse
-import sys
 
 from valutatrade_hub.core import usecases
+from valutatrade_hub.core.exceptions import (
+    ApiRequestError,
+    CurrencyNotFoundError,
+    InsufficientFundsError,
+)
 
 
 def parse_args(args: list[str]):
@@ -18,7 +22,6 @@ def parse_args(args: list[str]):
 
     try:
         # parse_known_args позволяет игнорировать лишние флаги
-        # (например, если передали --base для register)
         parsed, _ = parser.parse_known_args(args)
         return parsed
     except argparse.ArgumentError as e:
@@ -44,7 +47,7 @@ def run_cli():
 
             if command == "exit":
                 print("Выход...")
-                return     
+                return
             elif command == "help":
                 print("Примеры:")
                 print("  register --username alice --password 1234")
@@ -88,9 +91,19 @@ def run_cli():
             else:
                 print(f"Неизвестная команда: {command}")
 
+        # Перехват пользовательских исключений
+        except InsufficientFundsError as e:
+            print(f"Ошибка: {e}")
+        except CurrencyNotFoundError as e:
+            print(
+                f"Ошибка: {e}. Воспользуйтесь 'help', "
+                f"чтобы увидеть поддерживаемые коды."
+            )
+        except ApiRequestError as e:
+            print(f"Ошибка: {e}. Повторите попытку позже.")
+            
+        # Перехват стандартных исключений и ошибок валидации
         except ValueError as e:
             print(f"Ошибка: {e}")
-        except SystemExit:
-            pass
         except Exception as e:
             print(f"Системная ошибка: {e}")

@@ -1,0 +1,10 @@
+2026-11-06T16:02:43 INFO LOGIN user='bob' result=OK
+2026-11-06T16:02:50 INFO BUY currency='BTC' amount=0.01 result=OK
+2026-11-06T16:02:57 ERROR SELL currency='BTC' amount=100.0 result=ERROR error_type='InsufficientFundsError' msg='Недостаточно средств: доступно 0.0500 BTC, требуется 100.0000 BTC'
+2026-11-06T16:03:08 ERROR BUY currency='ABC' amount=1.0 result=ERROR error_type='CurrencyNotFoundError' msg='Неизвестная валюта 'ABC''
+2026-11-06T16:03:33 INFO REGISTER user='testuser' result=OK
+2026-11-06T16:03:44 INFO LOGIN user='testuser' result=OK
+2026-11-06T16:03:59 INFO BUY currency='BTC' amount=0.05 result=OK
+2026-11-06T16:04:27 INFO SELL currency='BTC' amount=0.02 result=OK
+2026-11-06T16:04:33 ERROR SELL currency='BTC' amount=10.0 result=ERROR error_type='InsufficientFundsError' msg='Недостаточно средств: доступно 0.0300 BTC, требуется 10.0000 BTC'
+2026-11-06T16:04:41 ERROR BUY currency='ABC' amount=5.0 result=ERROR error_type='CurrencyNotFoundError' msg='Неизвестная валюта 'ABC''
