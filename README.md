@@ -325,4 +325,4 @@ uv run pytest
 
 Репозиторий GitHub:
 
-https://github.com/Anastasia-00103/ValutaTrade-Hub_Stakhovskaya_M26-555
+https://github.com/Anastasia-00103/finalproject_Stakhovskaya_M26-555

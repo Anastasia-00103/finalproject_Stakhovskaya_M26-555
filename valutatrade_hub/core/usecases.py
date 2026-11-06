@@ -14,15 +14,23 @@ settings = SettingsLoader()
 
 
 def get_current_user() -> User | None:
+    """Возвращает текущего авторизованного пользователя (или None)."""
     return CURRENT_USER
 
 
 def _get_rates_from_cache() -> dict[str, float]:
     """
     Получает курсы из rates.json и проверяет их свежесть (TTL).
+    
     Возвращает словарь вида {'BTC': 75000.0, 'USD': 1.0}.
+    Выбрасывает ValueError, если кэш пуст или устарел.
     """
     rates_data = db.load("rates.json")
+    
+    # Защита от пустого файла или если вернулся список вместо словаря
+    if not isinstance(rates_data, dict):
+        rates_data = {}
+        
     pairs = rates_data.get("pairs", {})
 
     if not pairs:
@@ -61,6 +69,7 @@ def _get_rates_from_cache() -> dict[str, float]:
 
 
 def register(username: str, password: str) -> str:
+    """Регистрирует нового пользователя и создает для него пустой портфель."""
     global CURRENT_USER
     users_data = db.load("users.json")
 
@@ -88,6 +97,7 @@ def register(username: str, password: str) -> str:
 
 
 def login(username: str, password: str) -> str:
+    """Аутентифицирует пользователя и делает его текущим активным пользователем."""
     global CURRENT_USER
     users_data = db.load("users.json")
 
@@ -105,6 +115,7 @@ def login(username: str, password: str) -> str:
 
 
 def show_portfolio(base: str = "USD") -> str:
+    """Возвращает отформатированную строку с балансами и общей стоимостью."""
     if not CURRENT_USER:
         raise ValueError("Сначала выполните login")
 
@@ -149,10 +160,10 @@ def show_portfolio(base: str = "USD") -> str:
 
 
 def get_rate(from_curr: str, to_curr: str) -> str:
+    """Возвращает текущий курс валют из кэша с учетом TTL."""
     from_curr = get_currency(from_curr).code
     to_curr = get_currency(to_curr).code
 
-    # Получаем актуальные курсы с проверкой TTL
     rates = _get_rates_from_cache()
 
     if from_curr not in rates or to_curr not in rates:
@@ -171,6 +182,7 @@ def get_rate(from_curr: str, to_curr: str) -> str:
 
 @log_action("BUY")
 def buy(currency: str, amount: float) -> str:
+    """Совершает покупку валюты по курсу из кэша."""
     if not CURRENT_USER:
         raise ValueError("Сначала выполните login")
     if amount <= 0:
@@ -221,6 +233,7 @@ def buy(currency: str, amount: float) -> str:
 
 @log_action("SELL")
 def sell(currency: str, amount: float) -> str:
+    """Совершает продажу валюты по курсу из кэша."""
     if not CURRENT_USER:
         raise ValueError("Сначала выполните login")
     if amount <= 0:
