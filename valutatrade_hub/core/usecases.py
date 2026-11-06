@@ -1,9 +1,11 @@
+from datetime import datetime
+
 from .models import Portfolio, User
 from .utils import load_json, save_json
 
 CURRENT_USER: User | None = None
 
-# Заглушка курсов (вместо API)
+# Заглушка курсов
 MOCK_RATES = {
     "USD": 1.0,
     "EUR": 1.08,
@@ -22,7 +24,10 @@ def register(username: str, password: str) -> str:
     users_data = load_json("users.json")
 
     if any(u["username"] == username for u in users_data):
-        raise ValueError("Пользователь с таким именем уже существует")
+        raise ValueError(f"Имя пользователя '{username}' уже занято")
+
+    if len(password) < 4:
+        raise ValueError("Пароль должен быть не короче 4 символов")
 
     new_id = max([u["user_id"] for u in users_data], default=0) + 1
     user = User.register(user_id=new_id, username=username, password=password)
@@ -34,7 +39,10 @@ def register(username: str, password: str) -> str:
     portfolios_data.append(portfolio.to_dict())
     save_json("portfolios.json", portfolios_data)
 
-    return f"Пользователь {username} успешно зарегистрирован (ID: {new_id})."
+    return (
+        f"Пользователь '{username}' зарегистрирован (id={new_id}). "
+        f"Войдите: login --username {username} --password ****"
+    )
 
 
 def login(username: str, password: str) -> str:
@@ -46,62 +54,93 @@ def login(username: str, password: str) -> str:
             user = User.from_dict(u_data)
             if user.verify_password(password):
                 CURRENT_USER = user
-                return f"Вы вошли как {username} (ID: {user.user_id})."
+                return f"Вы вошли как '{username}'"
             else:
                 raise ValueError("Неверный пароль")
 
-    raise ValueError("Пользователь не найден")
+    raise ValueError(f"Пользователь '{username}' не найден")
 
 
-def get_portfolio() -> dict:
+def show_portfolio(base: str = "USD") -> str:
     if not CURRENT_USER:
-        raise ValueError("Необходимо войти в систему (login).")
+        raise ValueError("Сначала выполните login")
+
+    base = base.upper()
+    if base not in MOCK_RATES:
+        raise ValueError(f"Неизвестная базовая валюта '{base}'")
 
     portfolios_data = load_json("portfolios.json")
-    for p_data in portfolios_data:
-        if p_data["user_id"] == CURRENT_USER.user_id:
-            p = Portfolio.from_dict(p_data, CURRENT_USER)
-            return {code: w.balance for code, w in p.wallets.items()}
+    p_data = None
+    for p in portfolios_data:
+        if p["user_id"] == CURRENT_USER.user_id:
+            p_data = p
+            break
 
-    return {}
+    if not p_data:
+        raise ValueError("Портфель не найден")
+
+    portfolio = Portfolio.from_dict(p_data, CURRENT_USER)
+    if not portfolio.wallets:
+        return "Портфель пуст."
+
+    base_rate = MOCK_RATES[base]
+    lines = [f"Портфель пользователя '{CURRENT_USER.username}' (база: {base}):"]
+    total_value = 0.0
+
+    for code, wallet in portfolio.wallets.items():
+        if wallet.balance == 0:
+            continue
+
+        if code not in MOCK_RATES:
+            continue
+
+        usd_value = wallet.balance * MOCK_RATES[code]
+        base_value = usd_value / base_rate
+        total_value += base_value
+
+        if wallet.balance < 1:
+            bal_fmt = f"{wallet.balance:.4f}"
+        else:
+            bal_fmt = f"{wallet.balance:.2f}"
+        lines.append(f"- {code}: {bal_fmt}  → {base_value:.2f} {base}")
+
+    lines.append("-" * 33)
+    lines.append(f"ИТОГО: {total_value:,.2f} {base}".replace(",", " "))
+    return "\n".join(lines)
 
 
-def _get_rate(currency_code: str) -> float:
-    currency_code = currency_code.upper()
-    if currency_code in MOCK_RATES:
-        return MOCK_RATES[currency_code]
-
-    rates_data = load_json("rates.json")
-    key = f"{currency_code}_USD"
-    if isinstance(rates_data, dict) and key in rates_data:
-        return rates_data[key]["rate"]
-
-    raise ValueError(f"Курс для {currency_code} не найден.")
-
-
-def get_rate(currency_code: str) -> str:
-    rate = _get_rate(currency_code)
-    return f"Курс {currency_code.upper()} к USD: {rate}"
-
-
-def _execute_trade(action: str, from_curr: str, to_curr: str, amount: float) -> str:
-    if not CURRENT_USER:
-        raise ValueError("Необходимо войти в систему (login).")
-
-    if amount <= 0:
-        raise ValueError("Сумма должна быть больше нуля.")
-
+def get_rate(from_curr: str, to_curr: str) -> str:
     from_curr = from_curr.upper()
     to_curr = to_curr.upper()
 
-    rate_from = _get_rate(from_curr)
-    rate_to = _get_rate(to_curr)
+    if from_curr not in MOCK_RATES or to_curr not in MOCK_RATES:
+        raise ValueError(
+            f"Курс {from_curr}→{to_curr} недоступен. "
+            f"Повторите попытку позже."
+        )
 
-    exchange_rate = rate_from / rate_to
-    converted_amount = amount * exchange_rate
+    rate = MOCK_RATES[from_curr] / MOCK_RATES[to_curr]
+    reverse_rate = MOCK_RATES[to_curr] / MOCK_RATES[from_curr]
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    fmt = ".8f" if rate < 0.01 else ".2f"
+
+    return (
+        f"Курс {from_curr}→{to_curr}: {rate:{fmt}} (обновлено: {now_str})\n"
+        f"Обратный курс {to_curr}→{from_curr}: {reverse_rate:{fmt}}"
+    )
+
+
+def buy(currency: str, amount: float) -> str:
+    if not CURRENT_USER:
+        raise ValueError("Сначала выполните login")
+    if amount <= 0:
+        raise ValueError("'amount' должен быть положительным числом")
+
+    currency = currency.upper()
+    if currency not in MOCK_RATES:
+        raise ValueError(f"Не удалось получить курс для {currency}→USD")
 
     portfolios_data = load_json("portfolios.json")
-    
     p_idx = None
     for i, p in enumerate(portfolios_data):
         if p["user_id"] == CURRENT_USER.user_id:
@@ -109,38 +148,78 @@ def _execute_trade(action: str, from_curr: str, to_curr: str, amount: float) -> 
             break
 
     if p_idx is None:
-        raise ValueError("Портфель не найден.")
+        raise ValueError("Портфель не найден")
 
     portfolio = Portfolio.from_dict(portfolios_data[p_idx], CURRENT_USER)
 
-    if not portfolio.wallets.get(from_curr):
-        portfolio.add_currency(from_curr)
-    if not portfolio.wallets.get(to_curr):
-        portfolio.add_currency(to_curr)
+    if not portfolio.wallets.get(currency):
+        portfolio.add_currency(currency)
 
-    wallet_from = portfolio.get_wallet(from_curr)
-    wallet_to = portfolio.get_wallet(to_curr)
-
-    if action == "buy" or action == "sell":
-        if wallet_from.balance < amount:
-            raise ValueError(
-                f"Недостаточно средств в {from_curr}. Баланс: {wallet_from.balance}"
-            )
-        wallet_from.withdraw(amount)
-        wallet_to.deposit(converted_amount)
+    wallet = portfolio.get_wallet(currency)
+    old_balance = wallet.balance
+    wallet.deposit(amount)
 
     portfolios_data[p_idx] = portfolio.to_dict()
     save_json("portfolios.json", portfolios_data)
 
+    rate = MOCK_RATES[currency]
+    cost_usd = amount * rate
+
     return (
-        f"Успешно {action}: потрачено {amount} {from_curr}, "
-        f"получено {converted_amount:.6f} {to_curr}."
+        f"Покупка выполнена: {amount:.4f} {currency} "
+        f"по курсу {rate:.2f} USD/{currency}\n"
+        f"Изменения в портфеле:\n"
+        f"- {currency}: было {old_balance:.4f} → стало {wallet.balance:.4f}\n"
+        f"Оценочная стоимость покупки: {cost_usd:,.2f} USD".replace(",", " ")
     )
 
 
-def buy(from_curr: str, to_curr: str, amount: float) -> str:
-    return _execute_trade("buy", from_curr, to_curr, amount)
+def sell(currency: str, amount: float) -> str:
+    if not CURRENT_USER:
+        raise ValueError("Сначала выполните login")
+    if amount <= 0:
+        raise ValueError("'amount' должен быть положительным числом")
 
+    currency = currency.upper()
 
-def sell(from_curr: str, to_curr: str, amount: float) -> str:
-    return _execute_trade("sell", from_curr, to_curr, amount)
+    portfolios_data = load_json("portfolios.json")
+    p_idx = None
+    for i, p in enumerate(portfolios_data):
+        if p["user_id"] == CURRENT_USER.user_id:
+            p_idx = i
+            break
+
+    if p_idx is None:
+        raise ValueError("Портфель не найден")
+
+    portfolio = Portfolio.from_dict(portfolios_data[p_idx], CURRENT_USER)
+
+    if not portfolio.wallets.get(currency):
+        raise ValueError(
+            f"У вас нет кошелька '{currency}'. Добавьте валюту: "
+            f"она создаётся автоматически при первой покупке."
+        )
+
+    wallet = portfolio.get_wallet(currency)
+    if wallet.balance < amount:
+        raise ValueError(
+            f"Недостаточно средств: доступно {wallet.balance:.4f} {currency}, "
+            f"требуется {amount:.4f} {currency}"
+        )
+
+    old_balance = wallet.balance
+    wallet.withdraw(amount)
+
+    portfolios_data[p_idx] = portfolio.to_dict()
+    save_json("portfolios.json", portfolios_data)
+
+    rate = MOCK_RATES.get(currency, 1.0)
+    revenue_usd = amount * rate
+
+    return (
+        f"Продажа выполнена: {amount:.4f} {currency} "
+        f"по курсу {rate:.2f} USD/{currency}\n"
+        f"Изменения в портфеле:\n"
+        f"- {currency}: было {old_balance:.4f} → стало {wallet.balance:.4f}\n"
+        f"Оценочная выручка: {revenue_usd:,.2f} USD".replace(",", " ")
+    )
